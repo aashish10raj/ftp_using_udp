@@ -1,90 +1,76 @@
-
-// client side 
-#include <stdio.h> 
-#include <stdlib.h> 
-#include <string.h> 
-#include <sys/socket.h> 
-#include <sys/types.h> 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
-#include <arpa/inet.h> 
-#include <netinet/in.h> 
- 
-  
-#define IP_PROTOCOL 0 
-#define IP_ADDRESS "127.0.0.1" 
-#define PORT_NO 15011 
+#include <arpa/inet.h>
+#define SIZE 1024
 
- 
+// Sending the packets
+void send_file_data(FILE *fp, int sockfd, struct sockaddr_in addr){
+  int n;
+  char buffer[SIZE];
 
   
-// buffer clearance 
-void clearBuf(char* b) 
-{ 
-    int i; 
-    for (i = 0; i < 32; i++) 
-        b[i] = '\0'; 
-} 
-  
+  while(fgets(buffer, SIZE, fp) != NULL){
+    printf("SENDING... Data: %s", buffer);
 
-//receive file 
-int recvFile(char* buf, int s) 
-{ 
-    int i; 
-    char ch; 
-    for (i = 0; i < s; i++) { 
-        ch = buf[i]; 
-      
-        if (ch == EOF) 
-            return 1; 
-        else
-            printf("%c", ch); 
-    } 
-    return 0; 
-} 
-  
+    n = sendto(sockfd, buffer, SIZE, 0, (struct sockaddr*)&addr, sizeof(addr));
+    if (n == -1){
+      perror("ERROR... sending data to the server.");
+      exit(1);
+    }
+    bzero(buffer, SIZE);
 
-int main() 
-{ 
-    int sockfd, nBytes; 
-    struct sockaddr_in addr_con; 
-    int addrlen = sizeof(addr_con); 
-    addr_con.sin_family = AF_INET; 
-    addr_con.sin_port = htons(PORT_NO); 
-    addr_con.sin_addr.s_addr = inet_addr(IP_ADDRESS); 
-    char net_buf[32]; 
-    FILE* fp; 
+  }
+
+  // marking the END of the file
+  strcpy(buffer, "END");
+  sendto(sockfd, buffer, SIZE, 0, (struct sockaddr*)&addr, sizeof(addr));
+
+  fclose(fp);
+  return;
+}
+
+int main(){
+
+  // Defining the IP and Port
+  char *ip = "127.0.0.1";
+  int port = 8080;
+
   
-    // socket() 
-    sockfd = socket(AF_INET, SOCK_DGRAM, 
-                    IP_PROTOCOL); 
-  
-    if (sockfd < 0) 
-        printf("\ndescriptor not received!!\n"); 
-    else
-        printf("\ndescriptor %d received\n", sockfd); 
-  
-    while (1) { 
-        printf("\nEnter file name to receive:\n"); 
-        scanf("%s", net_buf); 
-        sendto(sockfd, net_buf, 32, 
-               0, (struct sockaddr*)&addr_con, 
-               addrlen); 
-  
-        printf("\n-Data successfully received\n"); 
-  
-        while (1) { 
-           
-            clearBuf(net_buf); 
-            nBytes = recvfrom(sockfd, net_buf, 32, 
-                              0, (struct sockaddr*)&addr_con, 
-                              &addrlen); 
-  
-            
-            if (recvFile(net_buf, 32)) { 
-                break; 
-            } 
-        } 
-        printf("\n-------------------------------\n"); 
-    } 
-    return 0; 
-} 
+  int socketd;
+  struct sockaddr_in server_addr;
+  FILE *fp;
+  char *filename;
+  printf("enter the name of the file you want to send to the server......");
+  scanf("%s", filename);
+
+  // Creating a UDP socket
+  socketd = socket(AF_INET, SOCK_DGRAM, 0);
+  if (socketd < 0){
+    perror("ERROR... socket error");
+    exit(1);
+  }
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_port = port;
+  server_addr.sin_addr.s_addr = inet_addr(ip);
+
+  // Reading the text file
+  fp = fopen(filename, "r");
+  if (fp == NULL){
+    perror("ERROR... while reading the file");
+    exit(1);
+  }
+
+  // Sending the datagram to the server
+  send_file_data(fp, socketd, server_addr);
+  printf("\n");
+
+  printf("SUCCESS... Data transfer completed.\n");
+  printf("CLOSING... Logging off from the server.\n");
+
+  close(socketd);
+
+  return 0;
+
+}
